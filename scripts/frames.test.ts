@@ -2,6 +2,7 @@
 import { FrameSim, formatStep } from '../src/simulation/frames.ts'
 import type { NetNode, NetEdge, NodeData } from '../src/types/index.ts'
 import { PRESETS } from '../src/simulation/presets.ts'
+import { TEST_PRESETS } from '../src/simulation/testPresets.ts'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = ''): void {
@@ -178,10 +179,10 @@ console.log('6. Hub vs switch')
 // ── 7. Presets behave like the real thing ─────────────────────────────────────
 console.log('7. Presets')
 {
-  const preset = (id: string) => PRESETS.find((p) => p.id === id)!
+  const preset = (id: string) => TEST_PRESETS.find((p) => p.id === id)!
   const hosts = (p: ReturnType<typeof preset>) =>
     p.nodes.filter((n) => ['pc', 'laptop', 'server', 'web', 'dns'].includes(n.data.deviceType) && n.data.ip)
-  for (const p of PRESETS) {
+  for (const p of [...PRESETS, ...TEST_PRESETS]) {
     let ok = 0, total = 0
     for (const a of hosts(p)) for (const b of hosts(p)) {
       if (a === b) continue

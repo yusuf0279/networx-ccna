@@ -1,4 +1,4 @@
-import type { NetNode, NetEdge, TerminalLine, MacEntry, PacketAnim, Level, NodeData } from '../types'
+import type { NetNode, NetEdge, TerminalLine, MacEntry, PacketAnim, NodeData } from '../types'
 import { findPath, nodeByIp, nodeById, simulatePingRtt, subnetToCidr } from './network'
 import { formatStep } from './frames'
 import type { FrameSim } from './frames'
@@ -10,7 +10,6 @@ export interface TermContext {
   selfId: string
   nodes: NetNode[]
   edges: NetEdge[]
-  level?: Level
   learnMac?: (switchId: string, entry: MacEntry) => void
   dispatchPackets?: (packets: PacketAnim[]) => void
   updateNodeData?: (id: string, patch: Partial<NodeData>) => void
@@ -688,35 +687,28 @@ function cmdDhclient(_args: string[], ctx: TermContext): Lines {
   return [err('dhclient: No DHCP server found. Is a router with DHCP enabled connected to this network?')]
 }
 
-function cmdHelp(ctx: TermContext): Lines {
-  const ks3 = ctx.level === 'ks3'
+function cmdHelp(): Lines {
   const lines: Lines = [
     out('Available commands:'),
     out('  ping <ip|host>     – Test connectivity (real ARP + ICMP frames)'),
     out('  ping -c 1 <ip>     – Send just one echo request'),
     out('  ipconfig           – Show IP configuration (Windows style)'),
     out('  ifconfig           – Show IP configuration (Linux style)'),
-  ]
-  if (!ks3) {
-    lines.push(
-      out('  traceroute <ip|host>– Trace network path (hostname ok)'),
-      out('  nslookup <domain>  – Query DNS for a domain name'),
-      out('  ping -v <ip>       – Ping and print every frame (ARP, switching, routing)'),
-      out('  ping --step <ip>   – Send one frame at a time in the Frame Stepper'),
-      out('  arp -a             – Show this device\'s ARP cache'),
-      out('  arp -d             – Clear the ARP cache'),
-      out('  netstat            – Show active connections'),
-      out('  route              – Show routing table'),
-      out('  curl <url>         – Make HTTP request'),
-      out('  ssh <ip>           – Connect to remote host or router (exit to quit)'),
-      out('  dhclient           – Request IP from DHCP server'),
-      out('  ipconfig /renew    – Same as dhclient (Windows style)'),
-    )
-  }
-  lines.push(
+    out('  traceroute <ip|host>– Trace network path (hostname ok)'),
+    out('  nslookup <domain>  – Query DNS for a domain name'),
+    out('  ping -v <ip>       – Ping and print every frame (ARP, switching, routing)'),
+    out('  ping --step <ip>   – Send one frame at a time in the Frame Stepper'),
+    out('  arp -a             – Show this device\'s ARP cache'),
+    out('  arp -d             – Clear the ARP cache'),
+    out('  netstat            – Show active connections'),
+    out('  route              – Show routing table'),
+    out('  curl <url>         – Make HTTP request'),
+    out('  ssh <ip>           – Connect to remote host or router (exit to quit)'),
+    out('  dhclient           – Request IP from DHCP server'),
+    out('  ipconfig /renew    – Same as dhclient (Windows style)'),
     out('  clear              – Clear terminal'),
     out('  help               – Show this help'),
-  )
+  ]
   return lines
 }
 
@@ -742,7 +734,7 @@ export function runCommand(raw: string, ctx: TermContext): TerminalLine[] {
     case 'ssh': return cmdSsh(args, ctx)
     case 'dhclient': return cmdDhclient(args, ctx)
     case 'clear': return [{ type: 'output', text: '\x1bCLEAR' }]
-    case 'help': return cmdHelp(ctx)
+    case 'help': return cmdHelp()
     case '': return []
     default: return [err(`command not found: ${cmd}`)]
   }

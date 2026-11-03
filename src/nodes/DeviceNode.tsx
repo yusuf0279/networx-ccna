@@ -46,7 +46,7 @@ const LAYER_INFO: Record<string, { label: string; color: string; bg: string }> =
 }
 
 export default function DeviceNode({ id, data, selected }: NodeProps<NetNode>) {
-  const { setPanel, selectNode, showLayers, level } = useNetworkStore()
+  const { setPanel, selectNode, showLayers } = useNetworkStore()
   const cfg = DEVICE_CONFIG[data.deviceType] ?? DEVICE_CONFIG.pc
   const Icon = cfg.icon
   const hasTerminal = ['pc', 'laptop', 'server', 'dns', 'web'].includes(data.deviceType)
@@ -111,7 +111,7 @@ export default function DeviceNode({ id, data, selected }: NodeProps<NetNode>) {
 
         {isCloud ? (
           <span className="text-xs text-sky-400 font-mono">WAN / ISP</span>
-        ) : level === 'ks5' && (data.deviceType === 'router' || data.deviceType === 'gateway') && data.wanIp ? (
+        ) : (data.deviceType === 'router' || data.deviceType === 'gateway') && data.wanIp ? (
           <>
             <span className="text-xs text-gray-500 font-mono">LAN: {data.ip}</span>
             <span className="text-xs text-orange-500 font-mono">WAN: {data.wanIp}</span>
