@@ -316,6 +316,11 @@ export default function ConfigPanel({ nodeId, onClose }: Props) {
                 </tbody>
               </table>
             )}
+            {data.nat?.static?.length ? (
+              <p className="text-xs text-gray-500 mt-4">
+                Static NAT: {data.nat.static.map((x) => `${x.inside} ⇄ ${x.outside}`).join(', ')}
+              </p>
+            ) : null}
             {data.nat && (
               <>
                 <div className="flex items-center justify-between mt-5 mb-2">

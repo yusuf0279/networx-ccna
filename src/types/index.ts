@@ -111,7 +111,7 @@ export interface NodeData extends Record<string, unknown> {
   /** ARP cache filled by real ARP exchanges */
   arpCache?: ArpEntry[]
   /** NAT (PAT/overload) on this router; outside = interface name or "@<peerNodeId>" */
-  nat?: { outside: string }
+  nat?: { outside: string; /** one inside host <-> one public address, usable from the internet */ static?: { inside: string; outside: string }[] }
   /** NAT translations created by real traffic */
   natTable?: NatEntry[]
 }

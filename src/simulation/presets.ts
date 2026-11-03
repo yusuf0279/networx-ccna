@@ -125,7 +125,7 @@ const ex2TwoSubnets: Preset = {
 const ex3Internet: Preset = {
   id: 'ex3-internet-nat',
   name: 'Exercise 3: Connecting to the Internet',
-  description: 'Exercise 2 plus an internet link. R1 has a default route (0.0.0.0/0) to the ISP and uses NAT to swap each PC\'s private address for its one public address, 203.0.113.2. Try: on PC1 run ping --step 8.8.8.8 and watch the source IP change at R1, then open R1 → Routing to see the NAT table. Then try pinging PC1 from the 8.8.8.8 server: it fails at the ISP, because private 192.168.x.x addresses are not routed on the internet.',
+  description: 'Exercise 2 plus an internet link. R1 has a default route (0.0.0.0/0) to the ISP and uses NAT to swap each PC\'s private address for its one public address, 203.0.113.2. Try: on PC1 run ping --step 8.8.8.8 and watch the source IP change at R1, then open R1 → Routing to see the NAT table. Then, on the 8.8.8.8 server, ping 203.0.113.3: it works, because PC4 has a static NAT entry. Ping 192.168.1.10 instead and it fails at the ISP, because private addresses are not routed on the internet.',
   nodes: [
     node('pc1', 'pc', 'PC1', '192.168.1.10', { x: 60, y: 60 },  { mac: '00:1a:2b:00:00:01' }),
     node('pc2', 'pc', 'PC2', '192.168.1.11', { x: 60, y: 300 }, { mac: '00:1a:2b:00:00:02' }),
@@ -135,13 +135,13 @@ const ex3Internet: Preset = {
       interfaces: {
         '@sw1': { ip: '192.168.1.1', subnet: '255.255.255.0' },
         '@sw2': { ip: '192.168.2.1', subnet: '255.255.255.0' },
-        '@isp': { ip: '203.0.113.2', subnet: '255.255.255.252' },
+        '@isp': { ip: '203.0.113.2', subnet: '255.255.255.248' },
       },
       routingTable: [
         { destination: '0.0.0.0', subnet: '0.0.0.0', gateway: '203.0.113.1', iface: '', metric: 0 },
       ],
-      nat: { outside: '@isp' },
-      notes: 'Default route 0.0.0.0/0 via the ISP (203.0.113.1): anything not on a connected network goes to the internet. NAT outside interface faces the ISP, so private 192.168.x.x sources leave as 203.0.113.2.',
+      nat: { outside: '@isp', static: [{ inside: '192.168.2.11', outside: '203.0.113.3' }] },
+      notes: 'Default route 0.0.0.0/0 via the ISP (203.0.113.1): anything not on a connected network goes to the internet. NAT outside interface faces the ISP, so private 192.168.x.x sources leave as 203.0.113.2. PC4 has a static NAT entry: it always uses its own public address 203.0.113.3, so the internet can start a conversation with it.',
     }),
     node('sw2', 'switch', 'SW2', '', { x: 600, y: 180 }, { mac: '00:1a:2b:00:02:00' }),
     node('pc3', 'pc', 'PC3', '192.168.2.10', { x: 780, y: 60 },  { mac: '00:1a:2b:00:00:03' }),
@@ -149,7 +149,7 @@ const ex3Internet: Preset = {
     node('isp', 'cloud', 'Internet (ISP)', '', { x: 420, y: -60 }, {
       mac: '00:1a:2b:00:0b:00',
       interfaces: {
-        '@r1':   { ip: '203.0.113.1', subnet: '255.255.255.252' },
+        '@r1':   { ip: '203.0.113.1', subnet: '255.255.255.248' },
         '@srv1': { ip: '8.8.8.1', subnet: '255.255.255.0' },
       },
       notes: 'The ISP\'s router. It only knows public addresses: it can reach R1\'s 203.0.113.2, but has no route to any 192.168.x.x network.',

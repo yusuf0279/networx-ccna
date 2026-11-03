@@ -276,6 +276,16 @@ console.log('8. Internet: default route and NAT')
     check(`ex3: the internet still can't reach private ${ip}`, rr?.status !== 'reply', JSON.stringify(rr))
   }
 
+  const sn = new FrameSim(ex3.nodes, ex3.edges)
+  const si = pingAll(sn, 'srv1', '203.0.113.3', 1)[0]
+  check('ex3: the internet CAN ping PC4 at its static public address', si?.status === 'reply' && si.fromIp === '203.0.113.3' && si.ttl === 62, JSON.stringify(si))
+  check('ex3: PC4 receives the request addressed to its private IP', sn.log.some((x) => x.delivery.toNodeId === 'pc4' && x.delivery.frame.kind === 'ICMP_ECHO_REQUEST' && x.delivery.frame.dstIp === '192.168.2.11'))
+  check('ex3: static NAT needs no NAT table row', sn.natEntries('r1').length === 0)
+  const so = new FrameSim(ex3.nodes, ex3.edges)
+  pingAll(so, 'pc4', '8.8.8.8', 1)
+  check('ex3: PC4 goes out as 203.0.113.3, not the shared address', so.log.some((x) => x.delivery.toNodeId === 'srv1' && x.delivery.frame.srcIp === '203.0.113.3'))
+  check('ex3: other PCs still cannot be pinged from outside', pingAll(new FrameSim(ex3.nodes, ex3.edges), 'srv1', '203.0.113.4', 1)[0]?.status !== 'reply')
+
   const s3 = new FrameSim(ex3.nodes, ex3.edges)
   pingAll(s3, 'pc1', '8.8.8.8', 2); pingAll(s3, 'pc1', '8.8.8.8', 2)
   check('ex3: repeated pings to the same host keep one NAT row', s3.natEntries('r1').length === 1, JSON.stringify(s3.natEntries('r1')))

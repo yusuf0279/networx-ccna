@@ -476,7 +476,16 @@ export class FrameSim {
     const route = this.lookup(nodeId, pkt.dstIp)
     const who = this.label(nodeId)
     const outside = route ? this.natOutside(nodeId) : undefined
-    if (route && outside?.ip && route.iface.name === outside.name && pkt.srcIp !== outside.ip) {
+    const stat = outside ? this.nodes.get(nodeId)?.data.nat?.static?.find((x) => x.inside === pkt.srcIp) : undefined
+    if (route && outside?.ip && route.iface.name === outside.name && stat) {
+      this.pendingNotes.push(
+        `${who} static NAT: source ${pkt.srcIp} → ${stat.outside} (this PC always uses its own public address)`,
+      )
+      pkt = { ...pkt, srcIp: stat.outside }
+    } else if (
+      route && outside?.ip && route.iface.name === outside.name && pkt.srcIp !== outside.ip &&
+      !this.nodes.get(nodeId)?.data.nat?.static?.some((x) => x.outside === pkt.srcIp) // already translated
+    ) {
       // NAT overload: private source address leaves as the router's public address.
       // One row per conversation, so repeated pings don't pile up duplicates.
       const table = this.natTables.get(nodeId)
@@ -590,7 +599,10 @@ export class FrameSim {
 
     if (f.kind === 'ARP_REQUEST' || f.kind === 'ARP_REPLY') {
       const cache = this.arpCaches.get(node.id)
-      const ownsTarget = ingress.ip && f.targetIp === ingress.ip
+      const outsideIf = this.natOutside(node.id)
+      const proxy = !!outsideIf && ingress.name === outsideIf.name && !!f.targetIp &&
+        !!node.data.nat?.static?.some((x) => x.outside === f.targetIp)
+      const ownsTarget = proxy || (ingress.ip && f.targetIp === ingress.ip)
       if (f.kind === 'ARP_REQUEST' && !ownsTarget) {
         return [`ARP asks for ${f.targetIp}, which is not ${ingress.ip || 'this device'} — ignored`]
       }
@@ -599,12 +611,14 @@ export class FrameSim {
         actions.push(`ARP cache: ${f.senderIp} → ${f.senderMac}`)
       }
       if (f.kind === 'ARP_REQUEST') {
-        actions.push(`that's me — unicast ARP reply to ${f.senderMac}`)
+        actions.push(proxy
+          ? `${f.targetIp} is a static NAT address that belongs to a PC behind me — proxy ARP reply with my own MAC`
+          : `that's me — unicast ARP reply to ${f.senderMac}`)
         this.emit(node.id, ingress.name, {
           kind: 'ARP_REPLY',
           srcMac: ingress.mac,
           dstMac: f.senderMac ?? f.srcMac,
-          senderIp: ingress.ip,
+          senderIp: proxy ? f.targetIp : ingress.ip,
           senderMac: ingress.mac,
           targetIp: f.senderIp,
         })
@@ -628,6 +642,13 @@ export class FrameSim {
     if (nat) {
       actions.push(`NAT: destination ${f.dstIp} → ${nat.insideLocal} (found in the NAT table)`)
       f = { ...f, dstIp: nat.insideLocal }
+    }
+    const st = outside && ingress.name === outside.name
+      ? node.data.nat?.static?.find((x) => x.outside === f.dstIp)
+      : undefined
+    if (st) {
+      actions.push(`static NAT: destination ${f.dstIp} → ${st.inside} (fixed mapping, no table entry needed)`)
+      f = { ...f, dstIp: st.inside }
     }
     const links = (f.links ?? 0) + 1
     const ownIps = (this.ifaces.get(node.id) ?? []).map((i) => i.ip).filter(Boolean)
