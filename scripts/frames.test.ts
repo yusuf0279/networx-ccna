@@ -267,6 +267,15 @@ console.log('8. Internet: default route and NAT')
   s2.ping('srv1', '203.0.113.2', 0, 'same'); s2.run()
   check('ex3: an echo request from the internet is not forwarded inside, even with a known id', !s2.log.some((x) => x.delivery.toNodeId === 'pc1' && x.delivery.frame.kind === 'ICMP_ECHO_REQUEST' && x.delivery.frame.srcIp === '8.8.8.8'))
 
+  for (const ip of ['1.1.1.1', '142.250.185.46', '93.184.216.34']) {
+    const rr = pingAll(new FrameSim(ex3.nodes, ex3.edges), 'pc3', ip, 1)[0]
+    check(`ex3: any public address answers (${ip})`, rr?.status === 'reply' && rr.fromIp === ip, JSON.stringify(rr))
+  }
+  for (const ip of ['192.168.1.10', '10.1.2.3', '172.16.0.5']) {
+    const rr = pingAll(new FrameSim(ex3.nodes, ex3.edges), 'srv1', ip, 1)[0]
+    check(`ex3: the internet still can't reach private ${ip}`, rr?.status !== 'reply', JSON.stringify(rr))
+  }
+
   const s3 = new FrameSim(ex3.nodes, ex3.edges)
   pingAll(s3, 'pc1', '8.8.8.8', 2); pingAll(s3, 'pc1', '8.8.8.8', 2)
   check('ex3: repeated pings to the same host keep one NAT row', s3.natEntries('r1').length === 1, JSON.stringify(s3.natEntries('r1')))

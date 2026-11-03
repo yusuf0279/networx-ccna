@@ -495,6 +495,15 @@ export class FrameSim {
       )
       pkt = { ...pkt, srcIp: outside.ip }
     }
+    // The ISP cloud stands in for the whole internet: any public address answers pings.
+    if (!route && this.nodes.get(nodeId)?.data.deviceType === 'cloud' && pkt.kind === 'ICMP_ECHO_REQUEST' && !isPrivateIp(pkt.dstIp)) {
+      this.pendingNotes.push(`${who} is the internet: ${pkt.dstIp} is a public address, so a host out there answers`)
+      this.sendIp(nodeId, {
+        srcIp: pkt.dstIp, dstIp: pkt.srcIp, ttl: 56, kind: 'ICMP_ECHO_REPLY',
+        seq: pkt.seq, pingId: pkt.pingId, links: pkt.links,
+      })
+      return
+    }
     if (!route) {
       this.pendingNotes.push(`${who} has no route to ${pkt.dstIp} — packet dropped`)
       if (pkt.kind === 'ICMP_ECHO_REQUEST') {
@@ -697,6 +706,11 @@ export class FrameSim {
     }
     return actions
   }
+}
+
+function isPrivateIp(ip: string): boolean {
+  const [a, b] = ip.split('.').map(Number)
+  return a === 10 || a === 127 || a === 0 || (a === 172 && b! >= 16 && b! <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)
 }
 
 function kindLabel(kind: IpPacket['kind']): string {
