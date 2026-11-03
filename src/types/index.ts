@@ -34,6 +34,19 @@ export interface ArpEntry {
   iface: string
 }
 
+/** One NAT translation (Cisco: show ip nat translations) */
+export interface NatEntry {
+  proto: 'icmp'
+  /** private address of the inside host */
+  insideLocal: string
+  /** public address it is translated to (the router's outside interface) */
+  insideGlobal: string
+  /** the internet host it is talking to */
+  outside: string
+  /** ICMP query id the translation is tracked by */
+  id: string
+}
+
 export interface IfaceConfig {
   ip: string
   subnet: string
@@ -97,6 +110,10 @@ export interface NodeData extends Record<string, unknown> {
   wanSubnet?: string
   /** ARP cache filled by real ARP exchanges */
   arpCache?: ArpEntry[]
+  /** NAT (PAT/overload) on this router; outside = interface name or "@<peerNodeId>" */
+  nat?: { outside: string }
+  /** NAT translations created by real traffic */
+  natTable?: NatEntry[]
 }
 
 export type NetNode = Node<NodeData>

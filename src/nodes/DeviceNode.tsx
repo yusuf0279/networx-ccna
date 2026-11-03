@@ -110,7 +110,12 @@ export default function DeviceNode({ id, data, selected }: NodeProps<NetNode>) {
         </span>
 
         {isCloud ? (
-          <span className="text-xs text-sky-400 font-mono">WAN / ISP</span>
+          <>
+            <span className="text-xs text-sky-400 font-mono">WAN / ISP</span>
+            {Object.values(data.interfaces ?? {}).filter((c) => c.ip).map((c) => (
+              <span key={c.ip} className="text-xs text-gray-500 font-mono">{c.ip}</span>
+            ))}
+          </>
         ) : (data.deviceType === 'router' || data.deviceType === 'gateway') && data.wanIp ? (
           <>
             <span className="text-xs text-gray-500 font-mono">LAN: {data.ip}</span>

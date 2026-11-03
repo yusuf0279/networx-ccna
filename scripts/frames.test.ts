@@ -182,7 +182,8 @@ console.log('7. Presets')
   const preset = (id: string) => TEST_PRESETS.find((p) => p.id === id)!
   const hosts = (p: ReturnType<typeof preset>) =>
     p.nodes.filter((n) => ['pc', 'laptop', 'server', 'web', 'dns'].includes(n.data.deviceType) && n.data.ip)
-  for (const p of [...PRESETS, ...TEST_PRESETS]) {
+  // ex3 is checked separately below: NAT means the internet can't start a ping to a private PC
+  for (const p of [...PRESETS, ...TEST_PRESETS].filter((x) => x.id !== 'ex3-internet-nat')) {
     let ok = 0, total = 0
     for (const a of hosts(p)) for (const b of hosts(p)) {
       if (a === b) continue
@@ -216,6 +217,59 @@ console.log('7. Presets')
   const three = preset('ccna-three-subnets')
   const t = pingAll(new FrameSim(three.nodes, three.edges), 'pc1', '201.191.20.254', 1)[0]
   check('three subnets: PC1 can ping the far interface of R1', t?.status === 'reply' && t.ttl === 64, JSON.stringify(t))
+}
+
+// ── 8. Exercise 3: default route + NAT to the internet ────────────────────────
+console.log('8. Internet: default route and NAT')
+{
+  const ex3 = PRESETS.find((p) => p.id === 'ex3-internet-nat')!
+  const pcs = ['pc1', 'pc2', 'pc3', 'pc4']
+  const ips = ['192.168.1.10', '192.168.1.11', '192.168.2.10', '192.168.2.11']
+  let ok = 0
+  for (const a of pcs) for (const b of ips) {
+    if (ex3.nodes.find((n) => n.id === a)!.data.ip === b) continue
+    if (pingAll(new FrameSim(ex3.nodes, ex3.edges), a, b, 1)[0]?.status === 'reply') ok++
+  }
+  check('ex3: PCs still reach each other', ok === 12, `${ok}/12`)
+
+  for (const pc of pcs) {
+    const r = pingAll(new FrameSim(ex3.nodes, ex3.edges), pc, '8.8.8.8', 1)[0]
+    check(`ex3: ${pc} reaches 8.8.8.8 through two routers (TTL 62)`, r?.status === 'reply' && r.ttl === 62 && r.fromIp === '8.8.8.8', JSON.stringify(r))
+  }
+
+  const sim = new FrameSim(ex3.nodes, ex3.edges)
+  pingAll(sim, 'pc1', '8.8.8.8', 1)
+  const atServer = sim.log.find((x) => x.delivery.toNodeId === 'srv1' && x.delivery.frame.kind === 'ICMP_ECHO_REQUEST')
+  check('ex3: the server sees R1\'s public address, not the private one', atServer?.delivery.frame.srcIp === '203.0.113.2', JSON.stringify(atServer?.delivery.frame))
+  const leftPc1 = sim.log.find((x) => x.delivery.fromNodeId === 'pc1' && x.delivery.frame.kind === 'ICMP_ECHO_REQUEST')
+  check('ex3: PC1 sent it from its private address', leftPc1?.delivery.frame.srcIp === '192.168.1.10')
+  const backToPc1 = sim.log.find((x) => x.delivery.toNodeId === 'pc1' && x.delivery.frame.kind === 'ICMP_ECHO_REPLY')
+  check('ex3: R1 translates the reply back to 192.168.1.10', backToPc1?.delivery.frame.dstIp === '192.168.1.10')
+  const nat = sim.natEntries('r1')
+  check('ex3: R1 NAT table has the translation', nat.length === 1 && nat[0]!.insideLocal === '192.168.1.10' && nat[0]!.insideGlobal === '203.0.113.2' && nat[0]!.outside === '8.8.8.8', JSON.stringify(nat))
+
+  const inbound = pingAll(new FrameSim(ex3.nodes, ex3.edges), 'srv1', '192.168.1.10', 1)[0]
+  check('ex3: the internet cannot start a ping to a private address', inbound?.status !== 'reply', JSON.stringify(inbound))
+
+  const noNat = ex3.nodes.map((n) => (n.id === 'r1' ? { ...n, data: { ...n.data, nat: undefined } } : n))
+  const bare = pingAll(new FrameSim(noNat, ex3.edges), 'pc1', '8.8.8.8', 1)[0]
+  check('ex3: without NAT the reply has no way back', bare?.status !== 'reply', JSON.stringify(bare))
+
+  const unconfigured = new FrameSim([dev('pcX', 'pc', { ip: '10.0.0.2', gateway: '' }), dev('cloudX', 'cloud', { ip: '', subnet: '' })], [{ id: 'z', source: 'pcX', target: 'cloudX' }])
+  check('a cloud with no addresses is still a dead end', pingAll(unconfigured, 'pcX', '10.0.0.1', 1)[0]?.status !== 'reply')
+  const palette = new FrameSim([dev('pcY', 'pc', { ip: '0.0.0.5', gateway: '' }), dev('cloudY', 'cloud', { ip: '0.0.0.0', subnet: '' })], [{ id: 'z', source: 'pcY', target: 'cloudY' }])
+  pingAll(palette, 'pcY', '0.0.0.0', 1)
+  check('… and its ping gets no reply', [...palette.results.values()][0]?.status !== 'reply')
+  check('a cloud from the palette (ip 0.0.0.0) is still a dead end', palette.log.some((x) => x.actions.some((a) => a.includes('not simulated further'))), JSON.stringify(palette.log.map((x) => x.actions)))
+
+  const s2 = new FrameSim(ex3.nodes, ex3.edges)
+  s2.ping('pc1', '8.8.8.8', 0, 'same'); s2.run()
+  s2.ping('srv1', '203.0.113.2', 0, 'same'); s2.run()
+  check('ex3: an echo request from the internet is not forwarded inside, even with a known id', !s2.log.some((x) => x.delivery.toNodeId === 'pc1' && x.delivery.frame.kind === 'ICMP_ECHO_REQUEST' && x.delivery.frame.srcIp === '8.8.8.8'))
+
+  const s3 = new FrameSim(ex3.nodes, ex3.edges)
+  pingAll(s3, 'pc1', '8.8.8.8', 2); pingAll(s3, 'pc1', '8.8.8.8', 2)
+  check('ex3: repeated pings to the same host keep one NAT row', s3.natEntries('r1').length === 1, JSON.stringify(s3.natEntries('r1')))
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed')

@@ -15,7 +15,7 @@
  * Each call to step() delivers exactly one frame to one device, so a UI or a
  * terminal can show the TCP/IP stack working one frame at a time.
  */
-import type { NetNode, NetEdge, MacEntry, ArpEntry } from '../types'
+import type { NetNode, NetEdge, MacEntry, ArpEntry, NatEntry } from '../types'
 
 export const BROADCAST = 'ff:ff:ff:ff:ff:ff'
 
@@ -77,7 +77,8 @@ function roleOf(node: NetNode): Role {
     case 'hub':
       return 'hub'
     case 'cloud':
-      return 'cloud'
+      // A cloud with per-interface addresses acts as the ISP's router; otherwise it's a dead end
+      return Object.values(node.data.interfaces ?? {}).some((c) => c.ip) ? 'router' : 'cloud'
     default:
       return 'host'
   }
@@ -262,6 +263,8 @@ export class FrameSim {
   readonly macTables = new Map<string, Map<string, string>>()
   /** per-host/router ARP cache: ip → { mac, iface } */
   readonly arpCaches = new Map<string, Map<string, { mac: string; iface: string }>>()
+  /** per-router NAT table: ICMP id → translation */
+  readonly natTables = new Map<string, Map<string, NatEntry>>()
   readonly log: StepRecord[] = []
   readonly results = new Map<string, PingResult>()
 
@@ -287,6 +290,9 @@ export class FrameSim {
           n.id,
           new Map((n.data.arpCache ?? []).map((a) => [a.ip, { mac: a.mac, iface: a.iface }])),
         )
+      }
+      if (role === 'router' && n.data.nat) {
+        this.natTables.set(n.id, new Map((n.data.natTable ?? []).map((e) => [e.id, e])))
       }
     }
   }
@@ -385,6 +391,10 @@ export class FrameSim {
     return [...c.entries()].map(([ip, v]) => ({ ip, mac: v.mac, iface: v.iface }))
   }
 
+  natEntries(nodeId: string): NatEntry[] {
+    return [...(this.natTables.get(nodeId)?.values() ?? [])]
+  }
+
   label(nodeId: string): string {
     return this.nodes.get(nodeId)?.data.label ?? nodeId
   }
@@ -446,7 +456,7 @@ export class FrameSim {
         best = {
           iface,
           nextHop: gw || dstIp,
-          via: `static route ${r.destination}/${bits}${gw ? ` via ${gw}` : ''}`,
+          via: `${bits === 0 ? 'default route' : 'static route'} ${r.destination}/${bits}${gw ? ` via ${gw}` : ''}`,
           bits,
           metric,
         }
@@ -455,9 +465,36 @@ export class FrameSim {
     return best
   }
 
+  /** The router's NAT outside interface, if NAT is configured. */
+  private natOutside(nodeId: string): Iface | undefined {
+    const outside = this.nodes.get(nodeId)?.data.nat?.outside
+    if (!outside) return undefined
+    return this.ifaces.get(nodeId)?.find((i) => i.name === outside || `@${i.peerNodeId}` === outside)
+  }
+
   private sendIp(nodeId: string, pkt: IpPacket): void {
     const route = this.lookup(nodeId, pkt.dstIp)
     const who = this.label(nodeId)
+    const outside = route ? this.natOutside(nodeId) : undefined
+    if (route && outside?.ip && route.iface.name === outside.name && pkt.srcIp !== outside.ip) {
+      // NAT overload: private source address leaves as the router's public address.
+      // One row per conversation, so repeated pings don't pile up duplicates.
+      const table = this.natTables.get(nodeId)
+      for (const [k, e] of table ?? []) {
+        if (e.insideLocal === pkt.srcIp && e.outside === pkt.dstIp) table!.delete(k)
+      }
+      table?.set(pkt.pingId, {
+        proto: 'icmp',
+        insideLocal: pkt.srcIp,
+        insideGlobal: outside.ip,
+        outside: pkt.dstIp,
+        id: pkt.pingId,
+      })
+      this.pendingNotes.push(
+        `${who} NAT: source ${pkt.srcIp} → ${outside.ip} (private address swapped for the public one on ${outside.name}; saved in the NAT table)`,
+      )
+      pkt = { ...pkt, srcIp: outside.ip }
+    }
     if (!route) {
       this.pendingNotes.push(`${who} has no route to ${pkt.dstIp} — packet dropped`)
       if (pkt.kind === 'ICMP_ECHO_REQUEST') {
@@ -524,7 +561,7 @@ export class FrameSim {
     if (!node) return ['device missing — frame lost']
     if (!node.data.isOn) return [`${node.data.label} is switched off — frame lost`]
     const role = roleOf(node)
-    const f = d.frame
+    let f = d.frame
 
     if (role === 'switch') return this.bridge(node, d)
     if (role === 'hub') {
@@ -574,6 +611,15 @@ export class FrameSim {
     }
 
     // IP / ICMP
+    const outside = this.natOutside(node.id)
+    const entry = outside && ingress.name === outside.name && f.dstIp === outside.ip && f.kind === 'ICMP_ECHO_REPLY'
+      ? this.natTables.get(node.id)?.get(f.pingId ?? '')
+      : undefined
+    const nat = entry && entry.outside === f.srcIp ? entry : undefined
+    if (nat) {
+      actions.push(`NAT: destination ${f.dstIp} → ${nat.insideLocal} (found in the NAT table)`)
+      f = { ...f, dstIp: nat.insideLocal }
+    }
     const links = (f.links ?? 0) + 1
     const ownIps = (this.ifaces.get(node.id) ?? []).map((i) => i.ip).filter(Boolean)
     if (f.dstIp && ownIps.includes(f.dstIp)) {

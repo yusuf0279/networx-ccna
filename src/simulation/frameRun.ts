@@ -29,6 +29,12 @@ export function syncTables(
         updateNodeData(node.id, { arpCache: entries })
       }
     }
+    if (sim.natTables.has(node.id)) {
+      const entries = sim.natEntries(node.id)
+      if (JSON.stringify(entries) !== JSON.stringify(node.data.natTable ?? [])) {
+        updateNodeData(node.id, { natTable: entries })
+      }
+    }
   }
 }
 

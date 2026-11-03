@@ -316,6 +316,43 @@ export default function ConfigPanel({ nodeId, onClose }: Props) {
                 </tbody>
               </table>
             )}
+            {data.nat && (
+              <>
+                <div className="flex items-center justify-between mt-5 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-700">NAT Table</h3>
+                  {(data.natTable?.length ?? 0) > 0 && (
+                    <button
+                      className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                      onClick={() => upd({ natTable: [] })}
+                    >
+                      <Trash2 size={12} /> Clear
+                    </button>
+                  )}
+                </div>
+                {(data.natTable?.length ?? 0) === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-2">Empty. Fills when an inside PC talks to the internet.</p>
+                ) : (
+                  <table className="w-full text-xs font-mono">
+                    <thead>
+                      <tr className="text-gray-400 text-left">
+                        <th className="py-1 font-normal">Inside local</th>
+                        <th className="py-1 font-normal">Inside global</th>
+                        <th className="py-1 font-normal text-right">Outside</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.natTable!.map((e) => (
+                        <tr key={e.id} className="border-b border-gray-50">
+                          <td className="py-1">{e.insideLocal}</td>
+                          <td className="py-1 text-blue-600">{e.insideGlobal}</td>
+                          <td className="py-1 text-right">{e.outside}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            )}
           </div>
         )}
 

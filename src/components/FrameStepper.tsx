@@ -61,6 +61,9 @@ export default function FrameStepper({ left = 12 }: { left?: number }) {
   const arpTables = [...sim.arpCaches.keys()]
     .map((id) => ({ id, rows: sim.arpEntries(id) }))
     .filter((t) => t.rows.length > 0)
+  const natTables = [...sim.natTables.keys()]
+    .map((id) => ({ id, rows: sim.natEntries(id) }))
+    .filter((t) => t.rows.length > 0)
 
   return (
     <div style={{ left }} className="absolute bottom-3 z-30 w-[480px] max-h-[78vh] flex flex-col bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
@@ -148,6 +151,22 @@ export default function FrameStepper({ left = 12 }: { left?: number }) {
                     <tr key={r.ip}>
                       <td className="pr-1">{r.ip}</td>
                       <td className="text-right">{r.mac}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+          {natTables.map((t) => (
+            <div key={t.id} className="border border-gray-100 rounded-lg p-2">
+              <div className="text-[11px] font-semibold text-gray-700 mb-1">{sim.label(t.id)} — NAT table</div>
+              <table className="w-full text-[10px] font-mono">
+                <tbody>
+                  {t.rows.map((r) => (
+                    <tr key={r.id}>
+                      <td className="pr-1">{r.insideLocal}</td>
+                      <td className="pr-1">→ {r.insideGlobal}</td>
+                      <td className="text-right">{r.outside}</td>
                     </tr>
                   ))}
                 </tbody>
